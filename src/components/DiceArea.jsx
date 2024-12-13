@@ -1,97 +1,170 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 
 const DiceContainer = styled.div`
-  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
   padding: 20px;
-  background-color: white;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 `;
 
 const DiceRow = styled.div`
   display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin: 20px 0;
+  gap: 12px;
 `;
 
-const Die = styled.span`
-  font-size: 32px;
-  cursor: pointer;
-  padding: 10px;
-  border-radius: 8px;
-  background-color: ${props => props.$isKept ? '#e1f5fe' : 'transparent'};
-  border: 2px solid ${props => props.$isKept ? '#03a9f4' : 'transparent'};
-  transition: all 0.3s ease;
+const Die = styled.button`
+  width: 60px;
+  height: 60px;
+  border: 2px solid ${props => props.$isKept ? '#2ecc71' : '#e0e0e0'};
+  border-radius: 12px;
+  background: white;
+  font-size: 24px;
+  cursor: ${props => props.$isRolling ? 'not-allowed' : 'pointer'};
+  opacity: ${props => props.$isRolling && !props.$isKept ? 0.7 : 1};
+  transition: all 0.2s ease;
 
   &:hover {
-    transform: scale(1.1);
+    transform: ${props => !props.$isRolling && !props.$isKept ? 'translateY(-2px)' : 'none'};
+    border-color: ${props => !props.$isRolling && !props.$isKept ? '#3498db' : props.$isKept ? '#2ecc71' : '#e0e0e0'};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 `;
 
-const Button = styled.button`
-  padding: 10px 20px;
-  font-size: 16px;
+const ButtonRow = styled.div`
+  display: flex;
+  gap: 12px;
+`;
+
+const ActionButton = styled.button`
+  padding: 8px 16px;
   border: none;
-  border-radius: 5px;
-  background-color: ${props => props.$disabled ? '#bdc3c7' : '#3498db'};
+  border-radius: 6px;
+  background: ${props => props.$primary ? '#2ecc71' : '#3498db'};
   color: white;
+  font-weight: bold;
   cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
-  transition: all 0.3s ease;
+  opacity: ${props => props.$disabled ? 0.5 : 1};
+  transition: all 0.2s ease;
 
   &:hover {
-    background-color: ${props => props.$disabled ? '#bdc3c7' : '#2980b9'};
+    opacity: ${props => props.$disabled ? 0.5 : 0.9};
   }
 
-  &:not(:last-child) {
-    margin-right: 10px;
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 `;
 
-const RollsRemaining = styled.p`
-  text-align: center;
-  color: #7f8c8d;
-  margin: 10px 0;
-`;
+const DICE_FACES = ['', '', '', '', '', ''];
+const INITIAL_SPEED = 50;
+const SPEED_MULTIPLIER = 1.5;
+const MAX_SPEED = 500;
 
-const DiceArea = ({ currentTurn, onRoll, onKeep, onConfirm }) => {
-  const { phase, rollsRemaining, diceResults, keptDice } = currentTurn;
+const DiceArea = ({ diceResults = [], keptDice = [], rollsRemaining = 0, onRoll, onKeep, onConfirm }) => {
+  const [isRolling, setIsRolling] = useState(false);
+  const [animatingDice, setAnimatingDice] = useState(Array(4).fill('?'));
+  const [animationSpeed, setAnimationSpeed] = useState(INITIAL_SPEED);
+  const timeoutRef = useRef(null);
+  const frameRef = useRef(0);
 
-  if (phase !== 'rolling') return null;
+  // Effect to handle the animation loop
+  useEffect(() => {
+    if (!isRolling) return;
+
+    const updateDice = () => {
+      setAnimatingDice(prev => 
+        prev.map((_, index) => 
+          keptDice[index] !== null ? diceResults[index] : 
+          DICE_FACES[Math.floor(Math.random() * DICE_FACES.length)]
+        )
+      );
+
+      const nextSpeed = animationSpeed * SPEED_MULTIPLIER;
+      if (nextSpeed > MAX_SPEED) {
+        setIsRolling(false);
+        setAnimationSpeed(INITIAL_SPEED);
+        // Schedule onRoll callback after state updates are complete
+        setTimeout(() => onRoll(), 0);
+      } else {
+        setAnimationSpeed(nextSpeed);
+        timeoutRef.current = setTimeout(updateDice, nextSpeed);
+      }
+    };
+
+    timeoutRef.current = setTimeout(updateDice, animationSpeed);
+    frameRef.current++;
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [isRolling, animationSpeed, keptDice, diceResults, onRoll]);
+
+  // Reset animation state when diceResults change
+  useEffect(() => {
+    if (!isRolling) {
+      setAnimatingDice(diceResults.map(die => die || '?'));
+      setAnimationSpeed(INITIAL_SPEED);
+      frameRef.current = 0;
+    }
+  }, [diceResults, isRolling]);
+
+  const handleRoll = () => {
+    setIsRolling(true);
+    setAnimationSpeed(INITIAL_SPEED);
+  };
+
+  const handleKeep = (index) => {
+    if (!isRolling && diceResults[index]) {
+      onKeep(index);
+    }
+  };
 
   return (
     <DiceContainer>
-      <RollsRemaining>
-        Rolls Remaining: {rollsRemaining}
-      </RollsRemaining>
-
       <DiceRow>
-        {diceResults.map((die, index) => (
+        {Array(4).fill(null).map((_, index) => (
           <Die
             key={index}
-            onClick={() => onKeep(index)}
+            onClick={() => handleKeep(index)}
             $isKept={keptDice[index] !== null}
+            $isRolling={isRolling}
+            disabled={isRolling && keptDice[index] === null}
           >
-            {die}
+            {keptDice[index] || animatingDice[index]}
           </Die>
         ))}
       </DiceRow>
-
-      <div>
-        <Button 
-          onClick={onRoll}
-          $disabled={rollsRemaining <= 0 || diceResults.length === 0}
+      
+      <ButtonRow>
+        <ActionButton
+          onClick={handleRoll}
+          disabled={rollsRemaining === 0 || isRolling}
+          $disabled={rollsRemaining === 0 || isRolling}
         >
-          Roll Dice
-        </Button>
-        <Button 
+          {isRolling ? 'Rolling...' : `Roll (${rollsRemaining} left)`}
+        </ActionButton>
+        
+        <ActionButton
           onClick={onConfirm}
-          $disabled={diceResults.length === 0}
+          disabled={isRolling || diceResults.every(die => !die)}
+          $disabled={isRolling || diceResults.every(die => !die)}
+          $primary
         >
           Confirm Roll
-        </Button>
-      </div>
+        </ActionButton>
+      </ButtonRow>
     </DiceContainer>
   );
 };

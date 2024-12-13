@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { ROOMS, CHARACTERS, UPGRADE_CARDS, RESCUE_CARDS } from './config/gameConfig';
+import { ROOMS, CHARACTERS, UPGRADE_CARDS, RESCUE_CARDS, CHARACTERS_ORDER } from './config/gameConfig';
 import GameBoard from './components/GameBoard';
 import CharacterMat from './components/CharacterMat';
 import DiceArea from './components/DiceArea';
 import UpgradeStore from './components/UpgradeStore';
+import GameLog from './components/GameLog';
 
 const AppContainer = styled.div`
   max-width: 1200px;
@@ -20,183 +21,286 @@ const Title = styled.h1`
 
 const CharacterMatsContainer = styled.div`
   display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 30px;
   flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin: 20px 0;
 `;
 
 function App() {
-  const [gameState, setGameState] = useState({
-    currentPlayer: "Lion Leader",
-    players: Object.keys(CHARACTERS),
-    playerPositions: Object.fromEntries(
-      Object.keys(CHARACTERS).map(character => [character, 0])
-    ),
-    board: Object.fromEntries(
-      Object.keys(ROOMS).map(roomId => [roomId, { fireTokens: roomId === '0' ? 0 : 1 }])
-    ),
-    store: UPGRADE_CARDS.slice(0, 3),
-    rescueCards: RESCUE_CARDS.map(animal => ({ 
-      animal, 
-      rescued: false, 
-      location: Math.floor(Math.random() * 10) + 1,
-      faceUp: false
-    })),
-    playerTokens: Object.fromEntries(
-      Object.keys(CHARACTERS).map(character => [
-        character, 
-        { water: 0, fire: 0 }  
-      ])
-    ),
-    currentTurn: {
-      phase: 'rolling',
-      rollsRemaining: 3,
-      diceResults: Array(4).fill(null),
-      keptDice: Array(4).fill(null),
-      movement: 0,
-      water: 0,
-      fire: 0
-    }
+  const [gameState, setGameState] = useState(() => {
+    const initialBoard = Object.entries(ROOMS).reduce((board, [roomId, room]) => {
+      if (room.fireSpaces > 0 && roomId !== '0') {  // Skip outside (room 0)
+        board[roomId] = {
+          numFireTokens: 1
+        };
+      }
+      return board;
+    }, {});
+
+    const initialState = {
+      currentPlayer: Object.keys(CHARACTERS)[0],
+      players: Object.keys(CHARACTERS),
+      playerPositions: Object.fromEntries(
+        Object.keys(CHARACTERS).map(character => [character, 0])
+      ),
+      board: initialBoard,
+      store: UPGRADE_CARDS.slice(0, 3),
+      rescueCards: RESCUE_CARDS.map(animal => ({ 
+        animal, 
+        rescued: false, 
+        location: Math.floor(Math.random() * 10) + 1,
+        faceUp: false
+      })),
+      playerTokens: Object.fromEntries(
+        Object.keys(CHARACTERS).map(character => [
+          character, 
+          { numWaterTokens: 0, fire: 0 }  
+        ])
+      ),
+      currentTurn: {
+        phase: 'rolling',
+        rollsRemaining: 3,
+        diceResults: Array(4).fill(null),
+        keptDice: Array(4).fill(null),
+        movement: 0,
+        water: 0,
+        fire: 0
+      },
+      log: [
+        { type: 'game', text: '🎮 Animal City Firefighters begins!' },
+        { type: 'turn', text: "It's Lion's turn" }
+      ]
+    };
+
+    return initialState;
   });
 
-  const handleDiceRoll = () => {
-    const symbols = ['🦶🏿', '💧', '🔥'];
-    
+  const [logMessages, setLogMessages] = useState([{
+    message: 'Game started! Each room begins with 1 fire token.',
+    type: 'phase',
+    timestamp: Date.now()
+  }]);
+
+  const addLogMessage = (message, type) => {
+    setLogMessages(prev => [...prev, { message, type, timestamp: Date.now() }]);
+  };
+
+  const handleRoll = () => {
     setGameState(prev => {
-      const newDiceResults = prev.currentTurn.diceResults.map((die, index) => 
-        prev.currentTurn.keptDice[index] !== null 
-          ? prev.currentTurn.keptDice[index]
-          : symbols[Math.floor(Math.random() * symbols.length)]
+      const newDice = prev.currentTurn.diceResults.map((die, index) => 
+        prev.currentTurn.keptDice[index] !== null ? die : 
+        ['🦶🏿', '🦶🏿', '💧', '💧', '🔥', '🔥'][Math.floor(Math.random() * 6)]
       );
 
+      const newDiceString = newDice
+        .map((die, i) => prev.currentTurn.keptDice[i] === null ? die : '(kept)')
+        .join(' ');
+      
+      addLogMessage(`${prev.currentPlayer} rolled: ${newDiceString}`, 'roll');
+      
       return {
         ...prev,
         currentTurn: {
           ...prev.currentTurn,
-          diceResults: newDiceResults,
+          diceResults: newDice,
           rollsRemaining: prev.currentTurn.rollsRemaining - 1
         }
       };
     });
   };
 
-  const handleDiceKeep = (index) => {
+  const handleKeepDie = (index) => {
     setGameState(prev => {
-      const updatedKeptDice = [...prev.currentTurn.keptDice];
-      updatedKeptDice[index] = updatedKeptDice[index] === null 
-        ? prev.currentTurn.diceResults[index] 
-        : null;
-
+      const newKeptDice = [...prev.currentTurn.keptDice];
+      newKeptDice[index] = newKeptDice[index] === null ? 
+        prev.currentTurn.diceResults[index] : null;
+      
       return {
         ...prev,
         currentTurn: {
           ...prev.currentTurn,
-          keptDice: updatedKeptDice
+          keptDice: newKeptDice
         }
       };
     });
   };
 
-  const handleConfirmDiceRoll = () => {
-    const waterGained = gameState.currentTurn.keptDice.filter(die => die === '💧').length;
-    const fireRolls = gameState.currentTurn.keptDice.filter(die => die === '🔥').length;
-    
+  const handleConfirmRoll = () => {
     setGameState(prev => {
-      const updatedBoard = { ...prev.board };
-      const currentPlayer = prev.currentPlayer;
-      const updatedTokens = {
-        ...prev.playerTokens,
-        [currentPlayer]: {
-          ...prev.playerTokens[currentPlayer],
-          water: prev.playerTokens[currentPlayer].water + waterGained
-        }
-      };
-      
-      // Only add fire if we rolled fire dice
-      if (fireRolls > 0 && fireRolls <= 10) {
-        const targetRoom = fireRolls.toString();
-        if (updatedBoard[targetRoom]) {
-          updatedBoard[targetRoom] = {
-            ...updatedBoard[targetRoom],  // Preserve existing room properties
-            fireTokens: (updatedBoard[targetRoom].fireTokens || 0) + 1
+      // First, calculate new fire tokens
+      const newBoard = { ...prev.board };
+      const numFireRolled = prev.currentTurn.diceResults.filter(die => die === '🔥').length;
+      const numWaterRolled = prev.currentTurn.diceResults.filter(die => die === '💧').length;
+      const movements = prev.currentTurn.diceResults.filter(die => die === '🦶🏿').length;
+
+      if (numFireRolled > 0) {
+        addLogMessage(
+          `At least one fire was rolled... prepare for flames!!`,
+          'fire'
+        );
+        // Room number matches number of fire symbols rolled
+        if (numFireRolled in ROOMS) {
+          const currentNumFireTokens = (newBoard[numFireRolled]?.numFireTokens || 0);
+          const newNumFireTokens = currentNumFireTokens === 0 ? 1 : 
+                            currentNumFireTokens >= 1 ? currentNumFireTokens * 2 : 
+                            currentNumFireTokens;
+          
+          const finalNumFireTokens = Math.min(newNumFireTokens, ROOMS[numFireRolled].fireSpaces);
+
+          newBoard[numFireRolled] = {
+            ...newBoard[numFireRolled],
+            numFireTokens: finalNumFireTokens
           };
+
+          if (currentNumFireTokens === 0) {
+            addLogMessage(
+              `Fire breaks out in ${ROOMS[numFireRolled].name}!`,
+              'fire'
+            );
+          } else {
+            addLogMessage(
+              `Fire spreads in ${ROOMS[numFireRolled].name}! (${currentNumFireTokens} → ${finalNumFireTokens} flames)`,
+              'fire'
+            );
+          }
+
+          if (finalNumFireTokens === ROOMS[numFireRolled].fireSpaces) {
+            addLogMessage(
+              `Warning: ${ROOMS[numFireRolled].name} has reached maximum fire capacity!`,
+              'warning'
+            );
+          }
         }
       }
-      
+
+      if (numWaterRolled > 0) {
+        addLogMessage(
+          `${prev.currentPlayer} collected ${numWaterRolled} water token${numWaterRolled > 1 ? 's' : ''}`,
+          'action'
+        );
+      }
+
+      if (movements > 0) {
+        addLogMessage(
+          `${prev.currentPlayer} can move ${movements} space${movements > 1 ? 's' : ''}`,
+          'action'
+        );
+      }
+
+      addLogMessage(
+        `${prev.currentPlayer}'s rolling phase ends - entering actions phase`,
+        'phase'
+      );
+
+      const currentNumWaterTokens = prev.playerTokens[prev.currentPlayer].numWaterTokens || 0;
+      const newNumWaterTokens = Math.min(
+        currentNumWaterTokens + numWaterRolled,
+        CHARACTERS[prev.currentPlayer].maxWaterTokens
+      );
+
       return {
         ...prev,
-        board: updatedBoard,
-        playerTokens: updatedTokens,
+        board: newBoard,
+        playerTokens: {
+          ...prev.playerTokens,
+          [prev.currentPlayer]: {
+            ...prev.playerTokens[prev.currentPlayer],
+            numWaterTokens: newNumWaterTokens
+          }
+        },
         currentTurn: {
           ...prev.currentTurn,
           phase: 'actions',
-          movement: prev.currentTurn.keptDice.filter(die => die === '🦶🏿').length,
-          diceResults: Array(4).fill(null),  // Reset dice results
-          keptDice: Array(4).fill(null)      // Reset kept dice
+          movement: movements,
+          numWaterRolled,
+          numFireRolled,
+          diceResults: [],
+          keptDice: Array(4).fill(null)
         }
       };
     });
   };
 
-  const handleMove = (roomId) => {
-    if (gameState.currentTurn.movement <= 0) return;
-    
-    const currentRoom = gameState.playerPositions[gameState.currentPlayer];
-    if (!ROOMS[currentRoom].adjacentRooms.includes(parseInt(roomId))) return;
+  const handleRoomClick = (roomId) => {
+    if (gameState.currentTurn.phase === 'actions' && gameState.currentTurn.movement > 0) {
+      const currentRoomId = gameState.playerPositions[gameState.currentPlayer];
+      const currentRoom = ROOMS[currentRoomId];
+      const targetRoom = ROOMS[roomId];
+      console.log("gameState: ", gameState);
+      console.log("currentRoom: ", currentRoom, "; currentRoomId: ", currentRoomId, "; roomId: ", roomId);
 
-    setGameState(prev => ({
-      ...prev,
-      playerPositions: {
-        ...prev.playerPositions,
-        [prev.currentPlayer]: parseInt(roomId)
-      },
-      currentTurn: {
-        ...prev.currentTurn,
-        movement: prev.currentTurn.movement - 1
+      // Check if the target room is adjacent to the current room
+      if (currentRoom.adjacentRooms.includes(Number(roomId))) {
+        setGameState(prev => {
+          const newMovement = prev.currentTurn.movement - 1;
+          
+          addLogMessage(
+            `${prev.currentPlayer} moves from ${ROOMS[currentRoomId].name} to ${targetRoom.name}`,
+            'move'
+          );
+
+          return {
+            ...prev,
+            playerPositions: {
+              ...prev.playerPositions,
+              [prev.currentPlayer]: Number(roomId)
+            },
+            currentTurn: {
+              ...prev.currentTurn,
+              movement: newMovement
+            }
+          };
+        });
       }
-    }));
+    }
   };
 
   const handlePutOutFire = (roomId) => {
-    setGameState(prev => {
-      const currentPlayer = prev.currentPlayer;
-      const currentRoom = prev.board[roomId];
-      
-      // Update fire tokens in room and player's tokens
-      const updatedBoard = {
-        ...prev.board,
-        [roomId]: {
-          ...currentRoom,
-          fireTokens: currentRoom.fireTokens - 1
-        }
-      };
-      
-      const updatedTokens = {
-        ...prev.playerTokens,
-        [currentPlayer]: {
-          ...prev.playerTokens[currentPlayer],
-          water: prev.playerTokens[currentPlayer].water - 1,
-          fire: prev.playerTokens[currentPlayer].fire + 1
-        }
-      };
-      
-      return {
-        ...prev,
-        board: updatedBoard,
-        playerTokens: updatedTokens
-      };
-    });
+    if (gameState.playerTokens[gameState.currentPlayer].numWaterTokens > 0) {
+      setGameState(prev => {
+        const room = ROOMS[roomId];
+        const currentFires = prev.board[roomId]?.numFireTokens || 0;
+        const waterUsed = Math.min(prev.playerTokens[gameState.currentPlayer].numWaterTokens, currentFires);
+        const remainingFires = Math.max(0, currentFires - waterUsed);
+        
+        addLogMessage(
+          `${prev.currentPlayer} put out ${waterUsed} ${waterUsed === 1 ? 'fire' : 'fires'} in ${room.name}`,
+          'action'
+        );
+        
+        return {
+          ...prev,
+          board: {
+            ...prev.board,
+            [roomId]: {
+              ...prev.board[roomId],
+              numFireTokens: remainingFires
+            }
+          },
+          playerTokens: {
+            ...prev.playerTokens,
+            [prev.currentPlayer]: {
+              ...prev.playerTokens[prev.currentPlayer],
+              numWaterTokens: prev.playerTokens[prev.currentPlayer].numWaterTokens - waterUsed
+            }
+          }
+        };
+      });
+    }
   };
 
   const handleEndTurn = () => {
     setGameState(prev => {
       const currentPlayerIndex = prev.players.indexOf(prev.currentPlayer);
-      const nextPlayerIndex = (currentPlayerIndex + 1) % prev.players.length;
+      const nextPlayer = prev.players[(currentPlayerIndex + 1) % prev.players.length];
+      
+      addLogMessage(`${prev.currentPlayer}'s turn ends`, 'turn');
+      addLogMessage(`It's ${nextPlayer}'s turn`, 'turn');
       
       return {
         ...prev,
-        currentPlayer: prev.players[nextPlayerIndex],
+        currentPlayer: nextPlayer,
         currentTurn: {
           phase: 'rolling',
           rollsRemaining: 3,
@@ -219,9 +323,8 @@ function App() {
           <CharacterMat
             key={character}
             character={character}
-            isCurrentPlayer={gameState.currentPlayer === character}
-            tokens={gameState.playerTokens[character]}
-            characterDetails={CHARACTERS[character]}
+            isCurrentPlayer={character === gameState.currentPlayer}
+            gameState={gameState}
           />
         ))}
       </CharacterMatsContainer>
@@ -229,27 +332,21 @@ function App() {
       <GameBoard
         rooms={ROOMS}
         gameState={gameState}
-        onRoomClick={handleMove}
+        onRoomClick={handleRoomClick}
+        onPutOutFire={handlePutOutFire}
       />
 
       <DiceArea
-        currentTurn={gameState.currentTurn}
-        onRoll={handleDiceRoll}
-        onKeep={handleDiceKeep}
-        onConfirm={handleConfirmDiceRoll}
+        diceResults={gameState.currentTurn.diceResults}
+        keptDice={gameState.currentTurn.keptDice}
+        rollsRemaining={gameState.currentTurn.rollsRemaining}
+        onRoll={handleRoll}
+        onKeep={handleKeepDie}
+        onConfirm={handleConfirmRoll}
       />
 
       {gameState.currentTurn.phase === 'actions' && (
         <div>
-          {gameState.board[gameState.playerPositions[gameState.currentPlayer]] && 
-           gameState.board[gameState.playerPositions[gameState.currentPlayer]].fireTokens > 0 && (
-            <button 
-              onClick={() => handlePutOutFire(gameState.playerPositions[gameState.currentPlayer])}
-              disabled={gameState.playerTokens[gameState.currentPlayer].water <= 0}
-            >
-              Put Out Fire (Water Left: {gameState.playerTokens[gameState.currentPlayer].water})
-            </button>
-          )}
           <button onClick={handleEndTurn}>End Turn</button>
         </div>
       )}
@@ -262,6 +359,8 @@ function App() {
           console.log(`Buying card: ${gameState.store[index].name}`);
         }}
       />
+
+      <GameLog messages={logMessages} />
     </AppContainer>
   );
 }

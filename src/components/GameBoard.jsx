@@ -46,23 +46,26 @@ const FireSpace = styled.div`
   transition: opacity 0.2s ease;
 `;
 
-const CharactersInRoom = styled.div`
+const CharactersContainer = styled.div`
   display: flex;
-  gap: 5px;
   flex-wrap: wrap;
+  gap: 4px;
   margin-top: 8px;
-  border-top: 1px solid #eee;
-  padding-top: 8px;
 `;
 
 const CharacterToken = styled.div`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   margin: 2px;
-  padding: 4px 8px;
-  background-color: ${props => props.$isCurrentPlayer ? '#2ecc71' : '#95a5a6'};
-  color: white;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 4px;
+  font-size: 24px;
+  filter: ${props => props.$isCurrentPlayer ? 'drop-shadow(0 0 4px #2ecc71)' : 'none'};
+  transition: filter 0.3s ease;
+  cursor: help;
+  
+  &:hover {
+    transform: scale(1.1);
+  }
 `;
 
 const ConnectionLines = styled.svg`
@@ -125,16 +128,21 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
   };
 
   const getCharactersInRoom = (roomId) => {
-    return Object.entries(gameState.playerPositions)
-      .filter(([_, position]) => position === parseInt(roomId))
-      .map(([character]) => (
-        <CharacterToken 
-          key={character}
-          $isCurrentPlayer={character === gameState.currentPlayer}
-        >
-          {character}
-        </CharacterToken>
-      ));
+    return (
+      <CharactersContainer>
+        {Object.entries(gameState.playerPositions)
+          .filter(([_, position]) => position === parseInt(roomId))
+          .map(([character]) => (
+            <CharacterToken 
+              key={character}
+              $isCurrentPlayer={character === gameState.currentPlayer}
+              title={`${character}${CHARACTERS[character].specialty ? ` • ${CHARACTERS[character].specialty}` : ''}`}
+            >
+              {CHARACTERS[character].emoji}
+            </CharacterToken>
+          ))}
+      </CharactersContainer>
+    );
   };
 
   const getAdjacentRooms = (currentRoomId) => {
@@ -159,8 +167,8 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
 
   const canPutOutFire = (roomId) => {
     return gameState.currentTurn.phase === 'actions' &&
-           gameState.playerTokens[gameState.currentPlayer].water > 0 &&
-           gameState.board[roomId]?.fireTokens > 0;
+           gameState.playerTokens[gameState.currentPlayer].numWaterTokens > 0 &&
+           gameState.board[roomId]?.numFireTokens > 0;
   };
 
   const handleMove = (roomId) => {
@@ -236,7 +244,7 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
       {Object.entries(rooms).map(([roomId, room]) => {
         const validMove = isValidMove(roomId);
         const isOutside = roomId === '0';
-        const roomState = gameState.board[roomId] || { fireTokens: 0 };
+        const roomState = gameState.board[roomId] || { numFireTokens: 0 };
         
         return (
           <Room
@@ -255,7 +263,7 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
                 {Array.from({ length: room.fireSpaces }).map((_, index) => (
                   <FireSpace 
                     key={index}
-                    $isFilled={index < roomState.fireTokens}
+                    $isFilled={index < roomState.numFireTokens}
                   >
                     🔥
                   </FireSpace>
