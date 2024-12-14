@@ -108,8 +108,11 @@ const ActionArea = ({
         <>
           {gameState.currentTurn.numMovementsRemaining > 0 && (
             <ActionButtonGroup>
-              <div style={{ width: '100%', textAlign: 'center', marginBottom: '8px' }}>
-                Movements remaining: {gameState.currentTurn.numMovementsRemaining}
+              <div style={{ 
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                Move to:
               </div>
               {getAdjacentRooms(getCurrentRoom())?.map(room => (
                 <ActionButton
@@ -117,9 +120,15 @@ const ActionArea = ({
                   onClick={() => onRoomClick(room.id)}
                   $isEnabled={isValidMove(room.id)}
                 >
-                  Move to {room.name}
+                  {room.name}
                 </ActionButton>
               ))}
+              <div style={{ 
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                ({gameState.currentTurn.numMovementsRemaining} moves remaining)
+              </div>
             </ActionButtonGroup>
           )}
           
