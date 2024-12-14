@@ -2,11 +2,14 @@
   "name": "animal-city-firefighters",
   "version": "1.0.0",
   "description": "A digital version of the Animal City Firefighters board game",
+  "homepage": "https://benjiwheeler.github.io/animalcityfirefighters",
   "main": "index.js",
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "gh-pages": "^6.2.0",
     "vite": "^5.0.10"
   }
 }
