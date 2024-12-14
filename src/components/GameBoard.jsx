@@ -22,10 +22,12 @@ const Room = styled.div`
   border-radius: 8px;
   cursor: ${props => props.$isValidMove ? 'pointer' : 'default'};
   transform: translate(${props => props.x}px, ${props => props.y}px);
-  transition: background-color 0.3s ease;
-  
+  transition: all 0.3s ease;
+
   &:hover {
     background-color: ${props => props.$isValidMove ? '#c8e6c9' : '#f8f9fa'};
+    transform: translate(${props => props.x}px, ${props => props.y}px) 
+               ${props => props.$isValidMove ? 'scale(1.02)' : 'scale(1)'};
   }
 `;
 
@@ -77,55 +79,77 @@ const ConnectionLines = styled.svg`
   pointer-events: none;
 `;
 
-const ActionControls = styled.div`
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  padding: 15px;
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
+const ConnectionLine = styled.line`
+  stroke: #95a5a6;
+  stroke-width: 2;
+  stroke-dasharray: 5,5;
 `;
 
-const ActionButtonGroup = styled.div`
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-`;
-
-const ActionButton = styled.button`
-  padding: 8px 16px;
-  background-color: ${props => props.variant === 'fire' ? '#f44336' : '#4caf50'};
+const MoveButton = styled.button`
+  background-color: ${props => props.$isValidMove ? '#4caf50' : '#ccc'};
   color: white;
   border: none;
   border-radius: 4px;
-  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
-  font-size: 14px;
-  transition: background-color 0.2s;
-  opacity: ${props => props.$disabled ? 0.6 : 1};
+  padding: 4px 8px;
+  margin: 2px;
+  cursor: ${props => props.$isValidMove ? 'pointer' : 'not-allowed'};
+  opacity: ${props => props.$isValidMove ? '1' : '0.5'};
+  pointer-events: ${props => props.$isValidMove ? 'auto' : 'none'};
+  transition: all 0.3s ease;
 
   &:hover {
-    background-color: ${props => props.$disabled ? 
-      (props.variant === 'fire' ? '#f44336' : '#4caf50') : 
-      (props.variant === 'fire' ? '#d32f2f' : '#45a049')};
+    background-color: ${props => props.$isValidMove ? '#45a049' : '#ccc'};
+  }
+`;
+
+const ActionButton = styled.button`
+  background-color: ${props => props.disabled ? '#ccc' : '#2196f3'};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 2px;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  opacity: ${props => props.disabled ? '0.5' : '1'};
+  pointer-events: ${props => props.disabled ? 'none' : 'auto'};
+  transition: all 0.3s ease;
+
+  &:hover {
+    background-color: ${props => props.disabled ? '#ccc' : '#1976d2'};
   }
 `;
 
 const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
   const isValidMove = (roomId) => {
-    if (gameState.currentTurn.phase !== 'actions' || gameState.currentTurn.numMovementsRemaining <= 0) {
+    // Basic state checks
+    if (!gameState?.currentTurn?.phase || !gameState?.playerPositions) return false;
+    
+    // Must be in actions phase with movements remaining
+    if (gameState.currentTurn.phase !== 'actions' || 
+        gameState.currentTurn.numMovementsRemaining === undefined || 
+        gameState.currentTurn.numMovementsRemaining <= 0) {
       return false;
     }
     
+    // Get current room and check if target is adjacent
     const currentRoom = gameState.playerPositions[gameState.currentPlayer];
-    return rooms[currentRoom].adjacentRooms.includes(parseInt(roomId)) || 
-           rooms[roomId].adjacentRooms.includes(parseInt(currentRoom));
+    if (currentRoom === undefined || currentRoom === null) return false;
+    
+    const currentRoomObj = rooms[currentRoom];
+    return currentRoomObj.adjacentRooms.includes(parseInt(roomId));
+  };
+
+  const getCurrentRoom = () => gameState.playerPositions[gameState.currentPlayer];
+
+  const canPutOutFire = (roomId) => {
+    if (!gameState?.currentTurn?.phase || !gameState?.playerTokens || !gameState?.board) return false;
+    const currentPlayerRoom = gameState.playerPositions[gameState.currentPlayer];
+    if (currentPlayerRoom === undefined || currentPlayerRoom === null) return false;
+    
+    return gameState.currentTurn.phase === 'actions' &&
+           gameState.playerTokens[gameState.currentPlayer]?.numWaterTokens > 0 &&
+           gameState.board[roomId]?.numFireTokens > 0 &&
+           currentPlayerRoom === parseInt(roomId);
   };
 
   const getCharactersInRoom = (roomId) => {
@@ -146,38 +170,6 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
     );
   };
 
-  const getAdjacentRooms = (currentRoomId) => {
-    const currentRoom = rooms[currentRoomId];
-    const adjacentRooms = [];
-    
-    // Check rooms that list this room as adjacent
-    Object.entries(rooms).forEach(([id, room]) => {
-      if (currentRoom.adjacentRooms.includes(parseInt(id)) || 
-          room.adjacentRooms.includes(parseInt(currentRoomId))) {
-        adjacentRooms.push({
-          id: parseInt(id),
-          name: room.name,
-        });
-      }
-    });
-    
-    return adjacentRooms;
-  };
-
-  const getCurrentRoom = () => gameState.playerPositions[gameState.currentPlayer];
-
-  const canPutOutFire = (roomId) => {
-    return gameState.currentTurn.phase === 'actions' &&
-           gameState.playerTokens[gameState.currentPlayer].numWaterTokens > 0 &&
-           gameState.board[roomId]?.numFireTokens > 0;
-  };
-
-  const handleMove = (roomId) => {
-    if (isValidMove(roomId)) {
-      onRoomClick(roomId);
-    }
-  };
-
   const renderConnection = (room1Id, room2Id) => {
     const room1 = rooms[room1Id];
     const room2 = rooms[room2Id];
@@ -189,9 +181,9 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
     if (waypoints) {
       // Create array of points including start and end room centers
       const allPoints = [
-        { x: room1.position.x + room1.width/2, y: room1.position.y + room1.height/2, },
+        { x: room1.position.x + room1.width/2, y: room1.position.y + room1.height/2 },
         ...waypoints,
-        { x: room2.position.x + room2.width/2, y: room2.position.y + room2.height/2, },
+        { x: room2.position.x + room2.width/2, y: room2.position.y + room2.height/2 }
       ];
 
       return (
@@ -200,15 +192,12 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
             if (index === 0) return null; // Skip first point as it's just the start
             const prevPoint = allPoints[index - 1];
             return (
-              <line
+              <ConnectionLine
                 key={`segment-${index}`}
                 x1={prevPoint.x}
                 y1={prevPoint.y}
                 x2={point.x}
                 y2={point.y}
-                stroke="#95a5a6"
-                strokeWidth="2"
-                strokeDasharray="5,5"
               />
             );
           })}
@@ -218,95 +207,84 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
 
     // If no waypoints, draw direct line
     return (
-      <line 
+      <ConnectionLine
         key={`connection-${room1Id}-${room2Id}`}
         x1={room1.position.x + room1.width/2}
         y1={room1.position.y + room1.height/2}
         x2={room2.position.x + room2.width/2}
         y2={room2.position.y + room2.height/2}
-        stroke="#95a5a6"
-        strokeWidth="2"
-        strokeDasharray="5,5"
       />
     );
   };
 
+  const handleRoomClick = (roomId) => {
+    if (isValidMove(roomId)) {
+      onRoomClick(roomId);
+    }
+  };
+
   return (
-    <BoardContainer>
+    <BoardContainer className="board-container">
       <ConnectionLines>
         {Object.entries(rooms).flatMap(([roomId, room]) => 
           room.adjacentRooms.map(adjRoomId => {
+            // Only render connection once per pair of rooms
             if (parseInt(roomId) > adjRoomId) return null;
-            return renderConnection(
-              roomId,
-              adjRoomId
-            );
+            return renderConnection(roomId, adjRoomId);
           }).filter(Boolean)
         )}
       </ConnectionLines>
 
-      {Object.entries(rooms).map(([roomId, room]) => {
-        const validMove = isValidMove(roomId);
-        const isOutside = roomId === '0';
-        const roomState = gameState.board[roomId] || { numFireTokens: 0 };
+      {Object.entries(rooms).map(([id, room]) => {
+        const validMove = isValidMove(id);
+        const canExtinguish = canPutOutFire(id);
+        const isOutside = id === '0';
+        const roomState = gameState.board[id] || { numFireTokens: 0 };
         
         return (
           <Room
-            key={roomId}
+            key={id}
+            id={`room-${id}`}
             x={room.position.x}
             y={room.position.y}
             width={room.width}
             height={room.height}
             $isValidMove={validMove}
             $isOutside={isOutside}
-            onClick={() => validMove && onRoomClick(roomId)}
+            onClick={() => handleRoomClick(id)}
           >
             <div>{room.name}</div>
             {!isOutside && (
               <FireSpaces>
-                {Array.from({ length: room.fireSpaces }).map((_, index) => (
-                  <FireSpace 
+                {Array(room.fireSpaces).fill(null).map((_, index) => (
+                  <FireSpace
                     key={index}
-                    $isFilled={index < roomState.numFireTokens}
+                    $isFilled={index < (roomState.numFireTokens || 0)}
                   >
                     🔥
                   </FireSpace>
                 ))}
               </FireSpaces>
             )}
-            {getCharactersInRoom(roomId)}
+            {getCharactersInRoom(id)}
+            {validMove && (
+              <MoveButton
+                $isValidMove={true}
+                onClick={() => handleRoomClick(id)}
+              >
+                Move Here
+              </MoveButton>
+            )}
+            {canExtinguish && (
+              <ActionButton
+                onClick={() => onPutOutFire(id)}
+              >
+                Put Out Fire
+              </ActionButton>
+            )}
           </Room>
         );
       })}
-
-      {gameState.currentTurn.phase === 'actions' && (
-        <ActionControls>
-          {gameState.currentTurn.numMovementsRemaining > 0 && (
-            <ActionButtonGroup>
-              {getAdjacentRooms(getCurrentRoom()).map(room => (
-                <ActionButton
-                  key={room.id}
-                  onClick={() => handleMove(room.id)}
-                  $disabled={!isValidMove(room.id)}
-                >
-                  Move to {room.name}
-                </ActionButton>
-              ))}
-            </ActionButtonGroup>
-          )}
-          
-          {canPutOutFire(getCurrentRoom()) && (
-            <ActionButtonGroup>
-              <ActionButton
-                variant="fire"
-                onClick={() => onPutOutFire(getCurrentRoom())}
-              >
-                Put out fire in {rooms[getCurrentRoom()].name}
-              </ActionButton>
-            </ActionButtonGroup>
-          )}
-        </ActionControls>
-      )}
     </BoardContainer>
   );
 };

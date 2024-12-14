@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { ROOMS, CHARACTERS, UPGRADE_CARDS, RESCUE_CARDS, CHARACTERS_ORDER } from './config/gameConfig';
 import GameBoard from './components/GameBoard';
@@ -7,6 +7,7 @@ import DiceArea from './components/DiceArea';
 import ActionArea from './components/ActionArea';
 import UpgradeStore from './components/UpgradeStore';
 import GameLog from './components/GameLog';
+import AnimatedFlame from './components/AnimatedFlame';
 
 const AppContainer = styled.div`
   max-width: 1200px;
@@ -118,35 +119,124 @@ function App() {
     timestamp: Date.now()
   }]);
 
+  const [flameAnimation, setFlameAnimation] = useState(null);
+
+  const diceAreaRef = useRef(null);
+
   const addLogMessage = (message, type) => {
     setLogMessages(prev => [...prev, { message, type, timestamp: Date.now() }]);
   };
 
-  // Define dice faces
-  const FRIENDLY_DIE = ['👣', '👣', '👣👣', '💧', '💧', '💧💧'];
-  const DANGEROUS_DIE = ['🔥', '🔥🔥', '🔥🔥', '🔥🔥🔥', '👣', '💧'];
+  // Dice configuration
+  const FRIENDLY_DIE = ['🦶🏿', '🦶🏿', '🦶🏿🦶🏿', '💧', '💧', '💧💧'];
+  const DANGEROUS_DIE = ['🔥', '🔥🔥', '🔥🔥', '🔥🔥🔥', '🦶🏿', '🦶🏿'];
+
+  const countFireSpaces = (dice) => {
+    const fireRoll = dice.reduce((total, die) => {
+      if (die === '🔥') return total + 1;
+      if (die === '🔥🔥') return total + 2;
+      if (die === '🔥🔥🔥') return total + 3;
+      return total;
+    }, 0);
+    return fireRoll > 0 ? fireRoll : null;
+  };
+
+  const countWaterTokens = (dice) => {
+    return dice.reduce((total, die) => {
+      if (die === '💧') return total + 1;
+      if (die === '💧💧') return total + 2;
+      return total;
+    }, 0);
+  };
+
+  const countMovements = (dice) => {
+    const moveRoll = dice.reduce((total, die) => {
+      if (die === '🦶🏿') return total + 1;
+      if (die === '🦶🏿🦶🏿') return total + 2;
+      return total;
+    }, 0);
+    return moveRoll;
+  };
 
   const handleRoll = () => {
     setGameState(prev => {
-      const newDice = prev.currentTurn.diceResults.map((die, index) => {
-        if (prev.currentTurn.keptDice[index] !== null) return die;
+      const newDiceResults = prev.currentTurn.diceResults.map((die, index) => {
+        if (prev.currentTurn.keptDice[index]) return prev.currentTurn.keptDice[index];
         // First die is friendly, rest are dangerous
         const diceArray = index === 0 ? FRIENDLY_DIE : DANGEROUS_DIE;
         return diceArray[Math.floor(Math.random() * 6)];
       });
 
-      const newDiceString = newDice
-        .map((die, i) => prev.currentTurn.keptDice[i] === null ? die : '(kept)')
+      const newDiceString = newDiceResults
+        .map((die, i) => prev.currentTurn.keptDice[i] ? '(kept)' : die)
         .join(' ');
       
       addLogMessage(`${prev.currentPlayer} rolled: ${newDiceString}`, 'roll');
+      
+      const newRollsRemaining = prev.currentTurn.rollsRemaining - 1;
+      
+      // Auto-confirm if this was the last roll
+      if (newRollsRemaining === 0) {
+        const allDice = newDiceResults.map((die, index) => 
+          prev.currentTurn.keptDice[index] || die
+        );
+        
+        const fireSpaces = countFireSpaces(allDice);
+        const waterTokens = countWaterTokens(allDice);
+        const movements = countMovements(allDice);
+
+        if (fireSpaces !== null) {
+          addLogMessage(
+            `${fireSpaces} flames were rolled... prepare for fire!!`,
+            'fire'
+          );
+        }
+
+        if (waterTokens > 0) {
+          addLogMessage(
+            `${prev.currentPlayer} collected ${waterTokens} water token${waterTokens > 1 ? 's' : ''}`,
+            'action'
+          );
+        }
+
+        if (movements > 0) {
+          addLogMessage(
+            `${prev.currentPlayer} can move ${movements} space${movements > 1 ? 's' : ''}`,
+            'action'
+          );
+        }
+
+        addLogMessage(
+          `${prev.currentPlayer}'s rolling phase ends - entering actions phase`,
+          'phase'
+        );
+        
+        // Auto-confirm after processing the roll
+        setTimeout(() => {
+          handleConfirmRoll();
+        }, 500);
+
+        return {
+          ...prev,
+          currentTurn: {
+            ...prev.currentTurn,
+            phase: 'actions',
+            diceResults: allDice,
+            keptDice: Array(4).fill(null),
+            rollsRemaining: 0,
+            numMovementsRemaining: movements,
+            numWaterTokensCollected: waterTokens,
+            numFireTokensCollected: fireSpaces || 0
+          }
+        };
+      }
       
       return {
         ...prev,
         currentTurn: {
           ...prev.currentTurn,
-          diceResults: newDice,
-          rollsRemaining: prev.currentTurn.rollsRemaining - 1
+          diceResults: newDiceResults,
+          rollsRemaining: newRollsRemaining
         }
       };
     });
@@ -168,117 +258,119 @@ function App() {
     });
   };
 
-  const handleConfirmRoll = () => {
-    setGameState(prev => {
-      // First, calculate new fire tokens
-      const newBoard = { ...prev.board };
-
-      // Count total flames, water drops, and movements
-      const numTotalFlamesRolled = prev.currentTurn.diceResults.reduce((sum, die) => {
-        if (die === '🔥') return sum + 1;
-        if (die === '🔥🔥') return sum + 2;
-        if (die === '🔥🔥🔥') return sum + 3;
-        return sum;
-      }, 0);
-
-      const numWaterTokensCollected = prev.currentTurn.diceResults.reduce((sum, die) => {
-        if (die === '💧') return sum + 1;
-        if (die === '💧💧') return sum + 2;
-        return sum;
-      }, 0);
-
-      const numMovementsRemaining = prev.currentTurn.diceResults.reduce((sum, die) => {
-        if (die === '👣') return sum + 1;
-        if (die === '👣👣') return sum + 2;
-        return sum;
-      }, 0);
-
-      if (numTotalFlamesRolled > 0) {
+  const spreadFlames = (board, startingRoom) => {
+    let currentRoom = startingRoom;
+    let remainingFlames;
+    let newBoard = { ...board };
+    const visitedRooms = new Set([currentRoom]);
+    
+    // Calculate initial flames to add
+    const currentRoomFlames = newBoard[currentRoom]?.numFireTokens || 0;
+    if (currentRoomFlames === 0) {
+      remainingFlames = 1; // First flame in room
+    } else {
+      remainingFlames = currentRoomFlames; // Double the flames
+    }
+    
+    while (remainingFlames > 0) {
+      const currentRoomCapacity = ROOMS[currentRoom].fireSpaces;
+      const currentRoomFlames = newBoard[currentRoom]?.numFireTokens || 0;
+      const spaceAvailable = currentRoomCapacity - currentRoomFlames;
+      
+      if (spaceAvailable > 0) {
+        // Add as many flames as possible to current room
+        const flamesToAdd = Math.min(spaceAvailable, remainingFlames);
+        newBoard[currentRoom] = {
+          ...newBoard[currentRoom],
+          numFireTokens: currentRoomFlames + flamesToAdd
+        };
+        remainingFlames -= flamesToAdd;
+        
         addLogMessage(
-          `${numTotalFlamesRolled} flames were rolled... prepare for fire!!`,
+          currentRoomFlames === 0
+            ? `Fire breaks out in ${ROOMS[currentRoom].name}!`
+            : `Fire spreads in ${ROOMS[currentRoom].name}! (${currentRoomFlames} → ${currentRoomFlames + flamesToAdd} flames)`,
           'fire'
         );
-        // Room number matches total number of fire symbols rolled
-        if (numTotalFlamesRolled in ROOMS) {
-          const numFiresInCurRoom = (newBoard[numTotalFlamesRolled]?.numFireTokens || 0);
-          const numNewFireTokens = numFiresInCurRoom === 0 ? 1 : 
-                            numFiresInCurRoom >= 1 ? numFiresInCurRoom * 2 : 
-                            numFiresInCurRoom;
-          
-          const numFinalFireTokens = Math.min(numNewFireTokens, ROOMS[numTotalFlamesRolled].fireSpaces);
 
-          newBoard[numTotalFlamesRolled] = {
-            ...newBoard[numTotalFlamesRolled],
-            numFireTokens: numFinalFireTokens
-          };
-
-          if (numFiresInCurRoom === 0) {
-            addLogMessage(
-              `Fire breaks out in ${ROOMS[numTotalFlamesRolled].name}!`,
-              'fire'
-            );
-          } else {
-            addLogMessage(
-              `Fire spreads in ${ROOMS[numTotalFlamesRolled].name}! (${numFiresInCurRoom} → ${numFinalFireTokens} flames)`,
-              'fire'
-            );
-          }
-
-          if (numFinalFireTokens === ROOMS[numTotalFlamesRolled].fireSpaces) {
-            addLogMessage(
-              `Warning: ${ROOMS[numTotalFlamesRolled].name} has reached maximum fire capacity!`,
-              'warning'
-            );
-          }
+        if (currentRoomFlames + flamesToAdd === currentRoomCapacity) {
+          addLogMessage(
+            `Warning: ${ROOMS[currentRoom].name} has reached maximum fire capacity!`,
+            'warning'
+          );
         }
       }
-
-      if (numWaterTokensCollected > 0) {
+      
+      if (remainingFlames > 0) {
+        // Move to next room for overflow
+        const nextRoom = ROOMS[currentRoom].nextFireSpreadRoom;
+        if (nextRoom === undefined || visitedRooms.has(nextRoom)) {
+          // If there's no next room defined or we've been here before, the fire is out of control
+          addLogMessage(
+            "🚨 GAME OVER: The fire has spread out of control! The building is lost...",
+            'warning'
+          );
+          remainingFlames = 0;  // Stop spreading fire
+          break;
+        }
+        currentRoom = nextRoom;
+        visitedRooms.add(currentRoom);
         addLogMessage(
-          `${prev.currentPlayer} collected ${numWaterTokensCollected} water token${numWaterTokensCollected > 1 ? 's' : ''}`,
-          'action'
+          `Fire overflows to ${ROOMS[currentRoom].name}!`,
+          'fire'
         );
       }
+    }
+    
+    return newBoard;
+  };
 
-      if (numMovementsRemaining > 0) {
-        addLogMessage(
-          `${prev.currentPlayer} can move ${numMovementsRemaining} space${numMovementsRemaining > 1 ? 's' : ''}`,
-          'action'
-        );
+  const handleConfirmRoll = () => {
+    console.log('handleConfirmRoll - Starting');
+    setGameState(prev => {
+      const allDice = prev.currentTurn.diceResults.map((die, index) => 
+        prev.currentTurn.keptDice[index] || die
+      );
+      
+      const fireSpaces = countFireSpaces(allDice);
+      const waterTokens = countWaterTokens(allDice);
+      const movements = countMovements(allDice);
+
+      // Update player tokens
+      const updatedPlayerTokens = {
+        ...prev.playerTokens,
+        [prev.currentPlayer]: {
+          ...prev.playerTokens[prev.currentPlayer],
+          numWaterTokens: prev.playerTokens[prev.currentPlayer].numWaterTokens + waterTokens
+        }
+      };
+
+      // Spread fire if fire tokens were rolled
+      let updatedBoard = prev.board;
+      if (fireSpaces) {
+        updatedBoard = spreadFlames(prev.board, fireSpaces);
       }
 
-      addLogMessage(
-        `${prev.currentPlayer}'s rolling phase ends - entering actions phase`,
-        'phase'
-      );
-
-      const numCurrentWaterTokens = prev.playerTokens[prev.currentPlayer].numWaterTokens || 0;
-      const numFinalWaterTokens = Math.min(
-        numCurrentWaterTokens + numWaterTokensCollected,
-        CHARACTERS[prev.currentPlayer].maxWaterTokens
-      );
-
-      return {
+      const newState = {
         ...prev,
-        board: newBoard,
-        playerTokens: {
-          ...prev.playerTokens,
-          [prev.currentPlayer]: {
-            ...prev.playerTokens[prev.currentPlayer],
-            numWaterTokens: numFinalWaterTokens
-          }
-        },
+        board: updatedBoard,
+        playerTokens: updatedPlayerTokens,
         currentTurn: {
           ...prev.currentTurn,
           phase: 'actions',
-          numMovementsRemaining,
-          numWaterTokensCollected,
-          numFireTokensCollected: numTotalFlamesRolled,
-          diceResults: [],
-          keptDice: Array(4).fill(null)
+          diceResults: allDice,
+          keptDice: Array(4).fill(null),
+          rollsRemaining: 0,
+          numMovementsRemaining: movements,
+          numWaterTokensCollected: waterTokens,
+          numFireTokensCollected: fireSpaces || 0
         }
       };
+
+      console.log('handleConfirmRoll - New phase will be:', newState.currentTurn.phase);
+      return newState;
     });
+    console.log('handleConfirmRoll - After state update');
   };
 
   const handleRoomClick = (roomId) => {
@@ -316,15 +408,13 @@ function App() {
   };
 
   const handlePutOutFire = (roomId) => {
-    if (gameState.playerTokens[gameState.currentPlayer].numWaterTokens > 0) {
+    if (gameState.playerTokens[gameState.currentPlayer].numWaterTokens > 0 && 
+        gameState.board[roomId]?.numFireTokens > 0) {
       setGameState(prev => {
         const room = ROOMS[roomId];
-        const numFiresInCurRoom = prev.board[roomId]?.numFireTokens || 0;
-        const numWaterTokensUsed = Math.min(prev.playerTokens[gameState.currentPlayer].numWaterTokens, numFiresInCurRoom);
-        const numFiresRemainingInCurRoom = Math.max(0, numFiresInCurRoom - numWaterTokensUsed);
         
         addLogMessage(
-          `${prev.currentPlayer} put out ${numWaterTokensUsed} ${numWaterTokensUsed === 1 ? 'fire' : 'fires'} in ${room.name}`,
+          `${prev.currentPlayer} put out 1 fire in ${room.name}`,
           'action'
         );
         
@@ -334,16 +424,16 @@ function App() {
             ...prev.board,
             [roomId]: {
               ...prev.board[roomId],
-              numFireTokens: numFiresRemainingInCurRoom
+              numFireTokens: prev.board[roomId].numFireTokens - 1
             }
           },
           playerTokens: {
             ...prev.playerTokens,
             [prev.currentPlayer]: {
               ...prev.playerTokens[prev.currentPlayer],
-              numWaterTokens: prev.playerTokens[prev.currentPlayer].numWaterTokens - numWaterTokensUsed,
+              numWaterTokens: prev.playerTokens[prev.currentPlayer].numWaterTokens - 1,
               numFireTokens: Math.min(
-                prev.playerTokens[prev.currentPlayer].numFireTokens + numWaterTokensUsed,
+                prev.playerTokens[prev.currentPlayer].numFireTokens + 1,
                 CHARACTERS[prev.currentPlayer].maxFireTokens
               )
             }
@@ -381,13 +471,28 @@ function App() {
     <AppContainer>
       <Title>🚒 Animal City Firefighters 🐾</Title>
       
+      <div ref={diceAreaRef}>
+        <DiceArea
+          diceResults={gameState.currentTurn.diceResults}
+          keptDice={gameState.currentTurn.keptDice}
+          rollsRemaining={gameState.currentTurn.rollsRemaining}
+          onRoll={handleRoll}
+          onKeep={handleKeepDie}
+          onConfirm={handleConfirmRoll}
+          gameState={gameState}
+        />
+      </div>
+
+      {flameAnimation && (
+        <AnimatedFlame
+          startPosition={flameAnimation.startPosition}
+          endPosition={flameAnimation.endPosition}
+          onAnimationEnd={() => setFlameAnimation(null)}
+        />
+      )}
+
       <ActionArea
-        diceResults={gameState.currentTurn.diceResults}
-        keptDice={gameState.currentTurn.keptDice}
-        rollsRemaining={gameState.currentTurn.rollsRemaining}
-        onRoll={handleRoll}
-        onKeep={handleKeepDie}
-        onConfirm={handleConfirmRoll}
+        key={`action-area-${gameState.currentTurn.phase || 'none'}`}
         gameState={gameState}
         onRoomClick={handleRoomClick}
         onPutOutFire={handlePutOutFire}

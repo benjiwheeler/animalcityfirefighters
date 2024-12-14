@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 
+// Animation constants
+const INITIAL_SPEED = 50;
+const SPEED_MULTIPLIER = 1.2;
+const MAX_SPEED = 300;
+
+// Dice faces for animation
+const DICE_FACES = ['🦶🏿', '🦶🏿🦶🏿', '💧', '💧💧', '🔥', '🔥🔥', '🔥🔥🔥'];
+
 const DiceContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -70,12 +78,15 @@ const ActionButton = styled.button`
   }
 `;
 
-const DICE_FACES = ['', '', '', '', '', ''];
-const INITIAL_SPEED = 50;
-const SPEED_MULTIPLIER = 1.5;
-const MAX_SPEED = 500;
-
-const DiceArea = ({ diceResults = [], keptDice = [], rollsRemaining = 0, onRoll, onKeep, onConfirm }) => {
+const DiceArea = ({ 
+  diceResults = [], 
+  keptDice = [], 
+  rollsRemaining = 0, 
+  onRoll, 
+  onKeep, 
+  onConfirm,
+  gameState,  
+}) => {
   const [isRolling, setIsRolling] = useState(false);
   const [animatingDice, setAnimatingDice] = useState(Array(4).fill('?'));
   const [animationSpeed, setAnimationSpeed] = useState(INITIAL_SPEED);
@@ -119,7 +130,7 @@ const DiceArea = ({ diceResults = [], keptDice = [], rollsRemaining = 0, onRoll,
   // Reset animation state when diceResults change
   useEffect(() => {
     if (!isRolling) {
-      setAnimatingDice(diceResults.map(die => die || '?'));
+      setAnimatingDice(diceResults.map(die => die === undefined ? '?' : die));
       setAnimationSpeed(INITIAL_SPEED);
       frameRef.current = 0;
     }
@@ -163,8 +174,8 @@ const DiceArea = ({ diceResults = [], keptDice = [], rollsRemaining = 0, onRoll,
         
         <ActionButton
           onClick={onConfirm}
-          disabled={isRolling || diceResults.every(die => !die)}
-          $disabled={isRolling || diceResults.every(die => !die)}
+          disabled={isRolling || diceResults.every(die => !die) || gameState?.currentTurn?.phase === 'actions'}
+          $disabled={isRolling || diceResults.every(die => !die) || gameState?.currentTurn?.phase === 'actions'}
           $primary
         >
           Confirm Roll

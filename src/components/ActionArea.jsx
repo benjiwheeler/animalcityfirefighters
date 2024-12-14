@@ -1,6 +1,5 @@
 import React from 'react';
 import styled from 'styled-components';
-import DiceArea from './DiceArea';
 
 const ActionAreaContainer = styled.div`
   display: flex;
@@ -27,15 +26,16 @@ const ActionButton = styled.button`
   color: white;
   border: none;
   border-radius: 4px;
-  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
+  cursor: ${props => props.$isEnabled ? 'pointer' : 'not-allowed'};
+  opacity: ${props => props.$isEnabled ? 1 : 0.5};
+  pointer-events: ${props => props.$isEnabled ? 'auto' : 'none'};
   font-size: 14px;
-  transition: background-color 0.2s;
-  opacity: ${props => props.$disabled ? 0.6 : 1};
+  transition: all 0.3s ease;
 
   &:hover {
-    background-color: ${props => props.$disabled ? 
-      (props.variant === 'fire' ? '#f44336' : '#4caf50') : 
-      (props.variant === 'fire' ? '#d32f2f' : '#45a049')};
+    background-color: ${props => props.$isEnabled ? 
+      (props.variant === 'fire' ? '#d32f2f' : '#45a049') : 
+      (props.variant === 'fire' ? '#f44336' : '#4caf50')};
   }
 `;
 
@@ -48,13 +48,7 @@ const EndTurnButton = styled(ActionButton)`
   }
 `;
 
-const ActionArea = ({ 
-  diceResults, 
-  keptDice, 
-  rollsRemaining, 
-  onRoll, 
-  onKeep, 
-  onConfirm,
+const ActionArea = ({
   gameState,
   onRoomClick,
   onPutOutFire,
@@ -85,45 +79,43 @@ const ActionArea = ({
 
   const canPutOutFire = (roomId) => {
     if (!gameState?.currentTurn?.phase || !gameState?.playerTokens || !gameState?.board) return false;
+    const currentPlayerRoom = gameState.playerPositions[gameState.currentPlayer];
+    if (currentPlayerRoom === undefined || currentPlayerRoom === null) return false;
+    
     return gameState.currentTurn.phase === 'actions' &&
            gameState.playerTokens[gameState.currentPlayer]?.numWaterTokens > 0 &&
            gameState.board[roomId]?.numFireTokens > 0;
   };
 
   const isValidMove = (roomId) => {
-    if (!gameState?.currentTurn?.phase || !gameState?.currentTurn?.numMovementsRemaining) return false;
+    if (!gameState?.currentTurn?.phase) return false;
     if (gameState.currentTurn.phase !== 'actions' || 
+        !gameState.currentTurn.numMovementsRemaining || 
         gameState.currentTurn.numMovementsRemaining <= 0) {
       return false;
     }
     
-    const currentRoom = getCurrentRoom();
-    if (!currentRoom) return false;
+    const currentRoom = gameState.playerPositions[gameState.currentPlayer];
+    if (currentRoom === undefined || currentRoom === null) return false;
     
-    return rooms[currentRoom].adjacentRooms.includes(parseInt(roomId)) || 
-           rooms[roomId].adjacentRooms.includes(parseInt(currentRoom));
+    const currentRoomObj = rooms[currentRoom];
+    return currentRoomObj.adjacentRooms.includes(parseInt(roomId));
   };
 
   return (
     <ActionAreaContainer>
-      <DiceArea
-        diceResults={diceResults}
-        keptDice={keptDice}
-        rollsRemaining={rollsRemaining}
-        onRoll={onRoll}
-        onKeep={onKeep}
-        onConfirm={onConfirm}
-      />
-      
       {gameState?.currentTurn?.phase === 'actions' && (
         <>
           {gameState.currentTurn.numMovementsRemaining > 0 && (
             <ActionButtonGroup>
+              <div style={{ width: '100%', textAlign: 'center', marginBottom: '8px' }}>
+                Movements remaining: {gameState.currentTurn.numMovementsRemaining}
+              </div>
               {getAdjacentRooms(getCurrentRoom())?.map(room => (
                 <ActionButton
                   key={room.id}
                   onClick={() => onRoomClick(room.id)}
-                  $disabled={!isValidMove(room.id)}
+                  $isEnabled={isValidMove(room.id)}
                 >
                   Move to {room.name}
                 </ActionButton>
@@ -136,13 +128,17 @@ const ActionArea = ({
               <ActionButton
                 variant="fire"
                 onClick={() => onPutOutFire(getCurrentRoom())}
+                $isEnabled={true}
               >
-                Put Out Fire
+                Put Out Fire ( {gameState.playerTokens[gameState.currentPlayer].numWaterTokens})
               </ActionButton>
             </ActionButtonGroup>
           )}
 
-          <EndTurnButton onClick={onEndTurn}>
+          <EndTurnButton 
+            onClick={onEndTurn}
+            $isEnabled={true}
+          >
             End Turn
           </EndTurnButton>
         </>
