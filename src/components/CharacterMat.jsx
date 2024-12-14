@@ -162,8 +162,8 @@ const CharacterMat = ({ character, isCurrentPlayer, gameState }) => {
       </AbilitySection>
 
       {isCurrentPlayer && currentTurn?.phase === 'actions' && (
-        <MovesRemaining $hasMovesLeft={currentTurn.movement > 0}>
-          <span>🦶🏿</span> {currentTurn.movement} moves remaining
+        <MovesRemaining $hasMovesLeft={currentTurn.numMovementsRemaining > 0}>
+          <span>🦶🏿</span> {currentTurn.numMovementsRemaining} moves remaining
         </MovesRemaining>
       )}
     </MatContainer>

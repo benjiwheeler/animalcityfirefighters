@@ -141,8 +141,18 @@ export const ROOMS = processRooms(BASE_ROOMS);
 console.log(ROOMS);
 
 export const WAYPOINTS = {
-  "0-5": { x: 40, y: 400 },  // waypoint for connection between Outside (0) and room 5
-  "0-9": { x: 970, y: 140 }   // waypoint for connection between Outside (0) and room 9
+  "0-5": [
+    { x: 40, y: 200, },
+    { x: 40, y: 420, },
+  ],
+  "0-9": [
+    { x: 900, y: 120, },
+    { x: 1040, y: 180, },
+  ],
+  "8-9": [
+    { x: 950, y: 660, },
+    { x: 980, y: 620, },
+  ],
 };
 
 export const CHARACTERS = {
@@ -157,7 +167,7 @@ export const CHARACTERS = {
     maxCarry: 2,
     maxWaterTokens: 3,
     maxFireTokens: 3,
-    startRoom: 0
+    startRoom: 0,
   },
   "Orca": {
     emoji: "🐳",
@@ -166,7 +176,7 @@ export const CHARACTERS = {
     maxCarry: 1,
     maxWaterTokens: 6,
     maxFireTokens: 3,
-    startRoom: 0
+    startRoom: 0,
   },
   "Golden Retriever": {
     emoji: "🐕",
@@ -175,7 +185,7 @@ export const CHARACTERS = {
     maxCarry: Infinity,
     maxWaterTokens: 4,
     maxFireTokens: 4,
-    startRoom: 0
+    startRoom: 0,
   },
   "Cheetah": {
     emoji: "🐆",
@@ -184,9 +194,48 @@ export const CHARACTERS = {
     maxCarry: 0,
     maxWaterTokens: 4,
     maxFireTokens: 6,
-    startRoom: 0
-  }
+    startRoom: 0,
+  },
 };
+
+// Define the order of characters for turns
+export const CHARACTERS_ORDER = ["Lion", "Orca", "Golden Retriever", "Cheetah"];
+
+export const UPGRADE_CARDS = [
+  {
+    name: "Hose Junction",
+    buyCost: { numWaterTokens: 7, numFireTokens: 3 },
+    effect: "Players can give and receive Water Tokens",
+    useCost: "free",
+  },
+  {
+    name: "Fire Truck Quick Assist",
+    buyCost: { numWaterTokens: 4, numFireTokens: 4 },
+    effect: "Remove all flames from a room",
+    useCost: "free, discard after use",
+  },
+  {
+    name: "External Hose Quick Assist",
+    buyCost: { numWaterTokens: 3, numFireTokens: 3 },
+    effect: "Remove 3 flames from a room",
+    useCost: "free, discard after use",
+  },
+];
+
+export const RESCUE_CARDS = [
+  "Hamster",
+  "Parrot",
+  "Rabbit",
+  "Turtle",
+  "Parakeet",
+  "Puppy",
+  "Goldfish",
+  "Kitten",
+  "Hamster",
+  "Mouse",
+  "Rat",
+  "Koala"
+];
 
 /* Potential future characters:
   "Elephant": {
@@ -208,38 +257,3 @@ export const CHARACTERS = {
     startRoom: 0
   }
 */
-
-// Define the order of characters for turns
-export const CHARACTERS_ORDER = ["Lion", "Orca", "Golden Retriever", "Cheetah"];
-
-export const UPGRADE_CARDS = [
-  {
-    name: "Hose Junction",
-    buyCost: { water: 7, fire: 3 },
-    effect: "Players can give and receive Water Tokens",
-    useCost: "free"
-  },
-  {
-    name: "Fire Truck Quick Assist",
-    buyCost: { water: 4, fire: 4 },
-    effect: "Remove all flames from a room",
-    useCost: "free, discard after use"
-  },
-  {
-    name: "External Hose Quick Assist",
-    buyCost: { water: 3, fire: 3 },
-    effect: "Remove 3 flames from a room",
-    useCost: "free, discard after use"
-  }
-];
-
-export const RESCUE_CARDS = [
-  "Parakeet",
-  "Puppy",
-  "Goldfish",
-  "Kitten",
-  "Hamster",
-  "Mouse",
-  "Rat",
-  "Koala"
-];

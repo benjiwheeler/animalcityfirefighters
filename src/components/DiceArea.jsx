@@ -23,10 +23,15 @@ const Die = styled.button`
   border: 2px solid ${props => props.$isKept ? '#2ecc71' : '#e0e0e0'};
   border-radius: 12px;
   background: white;
-  font-size: 24px;
+  font-size: ${props => props.children?.length > 1 ? '18px' : '24px'};
+  line-height: 1;
   cursor: ${props => props.$isRolling ? 'not-allowed' : 'pointer'};
   opacity: ${props => props.$isRolling && !props.$isKept ? 0.7 : 1};
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
 
   &:hover {
     transform: ${props => !props.$isRolling && !props.$isKept ? 'translateY(-2px)' : 'none'};

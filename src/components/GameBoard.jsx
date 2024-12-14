@@ -84,6 +84,7 @@ const ActionControls = styled.div`
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 10px;
   padding: 15px;
   background-color: rgba(255, 255, 255, 0.9);
@@ -118,7 +119,7 @@ const ActionButton = styled.button`
 
 const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
   const isValidMove = (roomId) => {
-    if (gameState.currentTurn.phase !== 'actions' || gameState.currentTurn.movement <= 0) {
+    if (gameState.currentTurn.phase !== 'actions' || gameState.currentTurn.numMovementsRemaining <= 0) {
       return false;
     }
     
@@ -155,7 +156,7 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
           room.adjacentRooms.includes(parseInt(currentRoomId))) {
         adjacentRooms.push({
           id: parseInt(id),
-          name: room.name
+          name: room.name,
         });
       }
     });
@@ -177,49 +178,52 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
     }
   };
 
-  const renderConnection = (startRoom, endRoom) => {
-    const waypoint = WAYPOINTS[`${startRoom.id}-${endRoom.id}`];
-    
-    if (waypoint) {
-      // If there's a waypoint, render two lines
+  const renderConnection = (room1Id, room2Id) => {
+    const room1 = rooms[room1Id];
+    const room2 = rooms[room2Id];
+
+    const waypointKey = `${Math.min(room1Id, room2Id)}-${Math.max(room1Id, room2Id)}`;
+    const waypoints = WAYPOINTS[waypointKey];
+
+    // If we have waypoints, draw path segments through them
+    if (waypoints) {
+      // Create array of points including start and end room centers
+      const allPoints = [
+        { x: room1.position.x + room1.width/2, y: room1.position.y + room1.height/2, },
+        ...waypoints,
+        { x: room2.position.x + room2.width/2, y: room2.position.y + room2.height/2, },
+      ];
+
       return (
-        <g key={`${startRoom.id}-${endRoom.id}`}>
-          <line 
-            x1={startRoom.position.x + (startRoom.width / 2)}
-            y1={startRoom.position.y + (startRoom.height / 2)}
-            x2={waypoint.x}
-            y2={waypoint.y}
-            stroke="#95a5a6"
-            strokeWidth="2"
-            strokeDasharray="5,5"
-          />
-          <line 
-            x1={waypoint.x}
-            y1={waypoint.y}
-            x2={endRoom.position.x + (endRoom.width / 2)}
-            y2={endRoom.position.y + (endRoom.height / 2)}
-            stroke="#95a5a6"
-            strokeWidth="2"
-            strokeDasharray="5,5"
-          />
-          <circle
-            cx={waypoint.x}
-            cy={waypoint.y}
-            r={3}
-            fill="#95a5a6"
-          />
+        <g key={`connection-${room1Id}-${room2Id}`}>
+          {allPoints.map((point, index) => {
+            if (index === 0) return null; // Skip first point as it's just the start
+            const prevPoint = allPoints[index - 1];
+            return (
+              <line
+                key={`segment-${index}`}
+                x1={prevPoint.x}
+                y1={prevPoint.y}
+                x2={point.x}
+                y2={point.y}
+                stroke="#95a5a6"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+              />
+            );
+          })}
         </g>
       );
     }
 
-    // If no waypoint, render direct line
+    // If no waypoints, draw direct line
     return (
       <line 
-        key={`${startRoom.id}-${endRoom.id}`}
-        x1={startRoom.position.x + (startRoom.width / 2)}
-        y1={startRoom.position.y + (startRoom.height / 2)}
-        x2={endRoom.position.x + (endRoom.width / 2)}
-        y2={endRoom.position.y + (endRoom.height / 2)}
+        key={`connection-${room1Id}-${room2Id}`}
+        x1={room1.position.x + room1.width/2}
+        y1={room1.position.y + room1.height/2}
+        x2={room2.position.x + room2.width/2}
+        y2={room2.position.y + room2.height/2}
         stroke="#95a5a6"
         strokeWidth="2"
         strokeDasharray="5,5"
@@ -234,8 +238,8 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
           room.adjacentRooms.map(adjRoomId => {
             if (parseInt(roomId) > adjRoomId) return null;
             return renderConnection(
-              { id: parseInt(roomId), ...room },
-              { id: adjRoomId, ...rooms[adjRoomId] }
+              roomId,
+              adjRoomId
             );
           }).filter(Boolean)
         )}
@@ -277,7 +281,7 @@ const GameBoard = ({ rooms, gameState, onRoomClick, onPutOutFire }) => {
 
       {gameState.currentTurn.phase === 'actions' && (
         <ActionControls>
-          {gameState.currentTurn.movement > 0 && (
+          {gameState.currentTurn.numMovementsRemaining > 0 && (
             <ActionButtonGroup>
               {getAdjacentRooms(getCurrentRoom()).map(room => (
                 <ActionButton
